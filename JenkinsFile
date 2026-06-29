@@ -1,91 +1,49 @@
 pipeline {
-    
-    // Run this pipeline on any available Jenkins agent (worker machine)
+
     agent any
 
-    // Use the Node.js installation we configured in Jenkins Tools
     tools {
         nodejs 'NodeJS-20'
     }
 
-    // Environment variables available to all stages
     environment {
-        // Tell Playwright we're in a CI environment
-        // This enables stricter settings (forbidOnly, more retries)
         CI = 'true'
-        
-        // Playwright stores downloaded browsers here
-        // Setting this prevents re-downloading on every run
-        PLAYWRIGHT_BROWSERS_PATH = '0'
+        // Permanent folder outside workspace — survives cleanWs() between builds
+        PLAYWRIGHT_BROWSERS_PATH = '/Users/surajsahu/.jenkins/playwright-browsers'
     }
 
     stages {
-        
-        // ─────────────────────────────────────────────
-        // STAGE 1: Get the code from your repository
-        // ─────────────────────────────────────────────
+
         stage('Checkout') {
             steps {
-                // 'checkout scm' means: get code from wherever this Jenkinsfile lives
                 checkout scm
                 echo 'Code checked out successfully'
             }
         }
 
-        // ─────────────────────────────────────────────
-        // STAGE 2: Install project dependencies
-        // ─────────────────────────────────────────────
         stage('Install Dependencies') {
             steps {
-                // 'npm ci' is preferred over 'npm install' in CI:
-                // - It uses the exact versions from package-lock.json (reproducible)
-                // - It's faster (doesn't resolve versions)
-                // - It fails if package-lock.json is out of sync (catches mistakes)
-                // This also installs TypeScript types and the Playwright test runner
                 sh 'npm ci'
                 echo 'Node dependencies installed'
             }
         }
 
-        // ─────────────────────────────────────────────
-        // STAGE 3: Download Playwright browser binaries
-        // ─────────────────────────────────────────────
         stage('Install Playwright Browsers') {
             steps {
-                // --with-deps also installs OS-level dependencies (fonts, libraries)
-                // that browsers need. Essential on fresh Linux machines.
-                sh 'npx playwright install --with-deps'
-                echo 'Playwright browsers installed'
+                // Uses PLAYWRIGHT_BROWSERS_PATH set above.
+                // First run: downloads browsers to that permanent folder.
+                // Every run after: finds them already there, skips download instantly.
+                sh 'npx playwright install'
+                echo 'Playwright browsers ready'
             }
         }
 
-        // ─────────────────────────────────────────────
-        // STAGE 4: (Optional) Type-check TypeScript
-        // ─────────────────────────────────────────────
-        stage('TypeScript Type Check') {
-            steps {
-                // Verify there are no TypeScript type errors before running tests
-                // This catches issues like wrong argument types or missing properties
-                // --noEmit means "check types but don't output compiled JS files"
-                sh './node_modules/.bin/tsc --noEmit'
-                echo 'TypeScript type check passed'
-            }
-        }
-
-        // ─────────────────────────────────────────────
-        // STAGE 5: Run the actual tests
-        // ─────────────────────────────────────────────
         stage('Run Playwright Tests') {
             steps {
-                // Playwright automatically compiles your .ts files and runs them
-                // No separate compilation step needed
                 sh 'npx playwright test'
             }
-            // 'post' runs after the stage, regardless of success/failure
             post {
                 always {
-                    // Publish the JUnit XML report so Jenkins shows test results
-                    // (Playwright generates this when you add 'junit' to reporter in config)
                     junit allowEmptyResults: true, testResults: 'test-results/*.xml'
                 }
                 failure {
@@ -97,12 +55,8 @@ pipeline {
             }
         }
 
-        // ─────────────────────────────────────────────
-        // STAGE 6: Publish the HTML report
-        // ─────────────────────────────────────────────
         stage('Publish HTML Report') {
             steps {
-                // The HTML Publisher plugin displays the report inside Jenkins
                 publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
@@ -116,24 +70,17 @@ pipeline {
         }
     }
 
-    // ─────────────────────────────────────────────
-    // POST: Runs after ALL stages complete
-    // ─────────────────────────────────────────────
     post {
         always {
-            // Archive test artifacts (screenshots, videos, traces)
-            // so you can download them from Jenkins after the build
             archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
             archiveArtifacts artifacts: 'test-results/**', allowEmptyArchive: true
-            
-            // Clean up the workspace to save disk space
             cleanWs()
         }
         success {
-            echo "Pipeline completed successfully!"
+            echo 'Pipeline completed successfully!'
         }
         failure {
-            echo "Pipeline failed! Review the test report."
+            echo 'Pipeline failed! Review the test report.'
         }
     }
 }

@@ -67,7 +67,7 @@ pipeline {
                 // Verify there are no TypeScript type errors before running tests
                 // This catches issues like wrong argument types or missing properties
                 // --noEmit means "check types but don't output compiled JS files"
-                sh 'npx tsc --noEmit'
+                sh './node_modules/.bin/tsc --noEmit'
                 echo 'TypeScript type check passed'
             }
         }

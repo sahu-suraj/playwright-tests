@@ -21,8 +21,11 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   
   // The report format — 'html' creates a beautiful visual report
-  reporter: 'html',
-  
+  reporter: [
+    ['html', { open: 'never' }],                                    // HTML report (for humans)
+    ['junit', { outputFile: 'test-results/results.xml' }],          // XML report (for Jenkins)
+    ['list'],                                                         // Console output during the run
+  ],
   // Settings shared across ALL tests
   use: {
     // Base URL — instead of writing full URLs, you can write just '/login'
